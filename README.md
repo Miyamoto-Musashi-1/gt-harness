@@ -2,7 +2,7 @@
 
 A coding-agent harness built from scratch, one small PR at a time.
 
-The CLI can send a single prompt to OpenAI and print the model's answer.
+The CLI can send a single prompt to OpenAI and stream the model's answer.
 Help, version, and development checks work without API credentials.
 Publication is disabled with `private: true`.
 
@@ -36,13 +36,18 @@ project can access. Replace `your-model-id` with its model ID.
 OPENAI_MODEL=your-model-id pnpm dev ask "Explain how CLI exit codes work."
 ```
 
-| Arguments                                              | Output                         | Exit code |
-| ------------------------------------------------------ | ------------------------------ | --------- |
-| None or `--help`                                       | Usage on stdout                | 0         |
-| `--version`                                            | Package version on stdout      | 0         |
-| `ask "<prompt>"`                                       | Completed model text on stdout | 0         |
-| `ask "<prompt>"` with configuration or request failure | Error on stderr                | 1         |
-| Anything else, including combined flags                | Error and help hint on stderr  | 2         |
+Text appears as it arrives. Press Ctrl+C to cancel, which preserves partial output,
+reports cancellation on stderr, and exits 130. Failed or incomplete responses exit 1.
+The request has a 60-second deadline and a 2,048-token output limit.
+
+| Arguments                                              | Output                        | Exit code |
+| ------------------------------------------------------ | ----------------------------- | --------- |
+| None or `--help`                                       | Usage on stdout               | 0         |
+| `--version`                                            | Package version on stdout     | 0         |
+| `ask "<prompt>"`                                       | Streamed model text on stdout | 0         |
+| `ask "<prompt>"` with configuration or request failure | Error on stderr               | 1         |
+| Anything else, including combined flags                | Error and help hint on stderr | 2         |
+| Ctrl+C during `ask`                                    | Cancellation on stderr        | 130       |
 
 ## Development checks
 
@@ -76,5 +81,6 @@ credential setup, and a rollback procedure. No publishing workflow exists yet.
 - [Small-PR roadmap](docs/roadmap.md)
 - [PR 1 lesson and exercise](docs/learning/pr-01.md)
 - [PR 2 lesson and exercise](docs/learning/pr-02.md)
+- [PR 3 lesson and exercise](docs/learning/pr-03.md)
 
 Licensed under MIT.
