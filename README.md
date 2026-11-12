@@ -2,9 +2,9 @@
 
 A coding-agent harness built from scratch, one small PR at a time.
 
-The current slice is a CLI foundation: help, version, argument errors, and
-automated checks. Model requests, file tools, and command execution come later.
-No API key is needed yet. Publication is disabled with `private: true`.
+The CLI can send a single prompt to OpenAI and print the model's answer.
+Help, version, and development checks work without API credentials.
+Publication is disabled with `private: true`.
 
 ## Setup
 
@@ -29,11 +29,20 @@ node dist/cli/index.js --version
 
 ## CLI contract
 
-| Arguments                               | Output                        | Exit code |
-| --------------------------------------- | ----------------------------- | --------- |
-| None or `--help`                        | Usage on stdout               | 0         |
-| `--version`                             | Package version on stdout     | 0         |
-| Anything else, including combined flags | Error and help hint on stderr | 2         |
+Set `OPENAI_API_KEY` in your environment and choose a Responses API model your
+project can access. Replace `your-model-id` with its model ID.
+
+```sh
+OPENAI_MODEL=your-model-id pnpm dev ask "Explain how CLI exit codes work."
+```
+
+| Arguments                                              | Output                         | Exit code |
+| ------------------------------------------------------ | ------------------------------ | --------- |
+| None or `--help`                                       | Usage on stdout                | 0         |
+| `--version`                                            | Package version on stdout      | 0         |
+| `ask "<prompt>"`                                       | Completed model text on stdout | 0         |
+| `ask "<prompt>"` with configuration or request failure | Error on stderr                | 1         |
+| Anything else, including combined flags                | Error and help hint on stderr  | 2         |
 
 ## Development checks
 
@@ -42,9 +51,11 @@ pnpm check
 ```
 
 This runs type-checking, linting, formatting checks, unit tests, and an installed
-package smoke test. The package test packs the project, installs the tarball in a
-temporary directory without network access or install scripts, verifies its files,
-and invokes its executable. Temporary files are removed afterward.
+package smoke test. The unit tests use scripted responses and need no network
+access. The package test installs the tarball and its runtime dependencies from
+the npm registry in a temporary directory, with install scripts disabled. It
+verifies the package files and invokes the installed executable without API
+credentials. Temporary files are removed afterward.
 
 Use `pnpm test:watch` while changing behavior, and `pnpm format` to format files.
 `pnpm build` compiles source only. `pnpm test:package` builds through the package's
@@ -64,5 +75,6 @@ credential setup, and a rollback procedure. No publishing workflow exists yet.
 - [Architecture decisions](docs/architecture.md)
 - [Small-PR roadmap](docs/roadmap.md)
 - [PR 1 lesson and exercise](docs/learning/pr-01.md)
+- [PR 2 lesson and exercise](docs/learning/pr-02.md)
 
 Licensed under MIT.

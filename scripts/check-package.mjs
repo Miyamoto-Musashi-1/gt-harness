@@ -23,8 +23,11 @@ try {
     'README.md',
     'dist/cli/index.js',
     'dist/cli/run.js',
+    'dist/providers/answer.js',
+    'dist/providers/openai.js',
     'docs/architecture.md',
     'docs/learning/pr-01.md',
+    'docs/learning/pr-02.md',
     'docs/roadmap.md',
     'package.json',
   ]);
@@ -35,7 +38,6 @@ try {
       'install',
       '--prefix',
       temporary,
-      '--offline',
       '--ignore-scripts',
       '--no-audit',
       '--no-fund',
@@ -82,6 +84,16 @@ try {
       }
     }
   }
+
+  const ask = spawnSync(binary, ['ask', 'Explain argv.'], {
+    cwd: temporary,
+    encoding: 'utf8',
+    env: { ...process.env, OPENAI_API_KEY: '', OPENAI_MODEL: '' },
+  });
+  assert.ifError(ask.error);
+  assert.equal(ask.status, 1);
+  assert.equal(ask.stdout, '');
+  assert.match(ask.stderr, /Set OPENAI_API_KEY/);
 
   console.log(
     'Package contents and installed CLI verified in an isolated directory.',
