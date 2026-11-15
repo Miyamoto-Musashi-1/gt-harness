@@ -18,7 +18,8 @@ force an immediate process exit, allowing output to drain normally.
 
 `runCli` accepts arguments and the installed version, then returns an explicit
 result. Its interface includes stdout, stderr, and the exit code. It performs no
-I/O. The result is a discriminated union, so success and invalid usage have
+I/O directly. Streaming output uses an injected callback. The result is a
+discriminated union, so success and invalid usage have
 different types. Package metadata is the single source of truth for the version.
 
 Only the executable is public. An empty package `exports` map prevents supported

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -28,6 +28,7 @@ try {
     'docs/architecture.md',
     'docs/learning/pr-01.md',
     'docs/learning/pr-02.md',
+    'docs/learning/pr-03.md',
     'docs/roadmap.md',
     'package.json',
   ]);
@@ -94,6 +95,68 @@ try {
   assert.equal(ask.status, 1);
   assert.equal(ask.stdout, '');
   assert.match(ask.stderr, /Set OPENAI_API_KEY/);
+
+  for (const mode of ['complete', 'cancel']) {
+    await new Promise((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [
+          '--import',
+          fileURLToPath(
+            new URL('../tests/fixtures/mock-openai.mjs', import.meta.url),
+          ),
+          binary,
+          'ask',
+          'fixture prompt',
+        ],
+        {
+          cwd: temporary,
+          env: {
+            ...process.env,
+            OPENAI_API_KEY: 'fixture-key',
+            OPENAI_MODEL: 'fixture-model',
+            GT_HARNESS_FIXTURE_MODE: mode,
+          },
+        },
+      );
+      let stdout = '';
+      let stderr = '';
+      let interrupted = false;
+      const timeout = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(
+          new Error(
+            'Installed streaming CLI did not finish within 10 seconds.',
+          ),
+        );
+      }, 10_000);
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+        if (mode === 'cancel' && stdout.includes('Hello') && !interrupted) {
+          interrupted = true;
+          child.kill('SIGINT');
+        }
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        try {
+          assert.equal(code, mode === 'cancel' ? 130 : 0);
+          assert.equal(stdout, mode === 'cancel' ? 'Hello\n' : 'Hello world\n');
+          assert.equal(stderr, mode === 'cancel' ? 'Request cancelled.\n' : '');
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+  }
 
   console.log(
     'Package contents and installed CLI verified in an isolated directory.',

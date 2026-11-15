@@ -1,10 +1,14 @@
 import OpenAI from 'openai';
-import type { Answer } from './answer.js';
+import type { Answer, AnswerOptions } from './answer.js';
 
 export async function answerWithOpenAI(
   prompt: string,
   config: { apiKey: string | undefined; model: string | undefined },
+  options: AnswerOptions = {},
 ): Promise<Answer> {
+  if (options.signal?.aborted) {
+    return { ok: false, message: 'Request cancelled.' };
+  }
   const apiKey = config.apiKey?.trim();
   const model = config.model?.trim();
   if (!apiKey) {
@@ -14,6 +18,10 @@ export async function answerWithOpenAI(
     return { ok: false, message: 'Set OPENAI_MODEL before running ask.' };
   }
 
+  const deadline = AbortSignal.timeout(60_000);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, deadline])
+    : deadline;
   try {
     const client = new OpenAI({
       apiKey,
@@ -22,21 +30,53 @@ export async function answerWithOpenAI(
       maxRetries: 0,
       logLevel: 'off',
     });
-    const response = await client.responses.create({
-      model,
-      input: prompt,
-      store: false,
-      max_output_tokens: 2048,
-    });
-
-    if (response.status !== 'completed') {
-      return { ok: false, message: 'OpenAI did not complete the response.' };
+    const stream = await client.responses.create(
+      {
+        model,
+        input: prompt,
+        store: false,
+        max_output_tokens: 2048,
+        stream: true,
+      },
+      { signal },
+    );
+    let text = '';
+    let completed = false;
+    try {
+      for await (const event of stream) {
+        signal.throwIfAborted();
+        if (event.type === 'response.output_text.delta') {
+          text += event.delta;
+          options.onText?.(event.delta);
+        } else if (event.type === 'response.completed') {
+          completed = true;
+          break;
+        } else if (
+          event.type === 'response.failed' ||
+          event.type === 'response.incomplete' ||
+          event.type === 'error'
+        ) {
+          break;
+        }
+      }
+      signal.throwIfAborted();
+      if (!completed) {
+        return { ok: false, message: 'OpenAI did not complete the response.' };
+      }
+      if (!text.trim()) {
+        return { ok: false, message: 'OpenAI returned no text answer.' };
+      }
+      return { ok: true, text };
+    } finally {
+      stream.controller.abort();
     }
-    if (!response.output_text?.trim()) {
-      return { ok: false, message: 'OpenAI returned no text answer.' };
-    }
-    return { ok: true, text: response.output_text };
   } catch (error) {
+    if (options.signal?.aborted) {
+      return { ok: false, message: 'Request cancelled.' };
+    }
+    if (signal.aborted) {
+      return { ok: false, message: 'The OpenAI request timed out.' };
+    }
     return { ok: false, message: describeFailure(error) };
   }
 }

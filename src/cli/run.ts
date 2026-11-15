@@ -1,4 +1,4 @@
-import type { AnswerPrompt } from '../providers/answer.js';
+import type { AnswerOptions, AnswerPrompt } from '../providers/answer.js';
 
 const HELP = `Usage: gt-harness [--help | --version]
        gt-harness ask "<prompt>"
@@ -15,12 +15,13 @@ Options:
 
 export type CliResult =
   | { exitCode: 0; stdout: string; stderr: '' }
-  | { exitCode: 1 | 2; stdout: ''; stderr: string };
+  | { exitCode: 1 | 2 | 130; stdout: string; stderr: string };
 
 export async function runCli(
   args: readonly string[],
   version: string,
   answerPrompt: AnswerPrompt,
+  options: AnswerOptions = {},
 ): Promise<CliResult> {
   if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
     return { exitCode: 0, stdout: HELP, stderr: '' };
@@ -40,13 +41,30 @@ export async function runCli(
       };
     }
 
-    const answer = await answerPrompt(prompt);
+    let lastChunk = '';
+    const answer = await answerPrompt(prompt, {
+      ...options,
+      onText: (chunk) => {
+        if (chunk && options.onText) {
+          options.onText(chunk);
+          lastChunk = chunk;
+        }
+      },
+    });
+    const suffix = lastChunk && !lastChunk.endsWith('\n') ? '\n' : '';
+    if (options.signal?.aborted) {
+      return { exitCode: 130, stdout: suffix, stderr: 'Request cancelled.\n' };
+    }
     if (!answer.ok) {
-      return { exitCode: 1, stdout: '', stderr: `${answer.message}\n` };
+      return { exitCode: 1, stdout: suffix, stderr: `${answer.message}\n` };
     }
     return {
       exitCode: 0,
-      stdout: answer.text.endsWith('\n') ? answer.text : `${answer.text}\n`,
+      stdout: lastChunk
+        ? suffix
+        : answer.text.endsWith('\n')
+          ? answer.text
+          : `${answer.text}\n`,
       stderr: '',
     };
   }

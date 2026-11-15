@@ -60,7 +60,10 @@ describe('CLI contract', () => {
     });
     const result = await runCli(['ask', '  Explain argv.  '], '0.1.0', answer);
 
-    expect(answer).toHaveBeenCalledExactlyOnceWith('  Explain argv.  ');
+    expect(answer).toHaveBeenCalledExactlyOnceWith(
+      '  Explain argv.  ',
+      expect.objectContaining({ onText: expect.any(Function) }),
+    );
     expect(result).toEqual({
       exitCode: 0,
       stdout: 'A scripted answer.\n',
@@ -82,6 +85,70 @@ describe('CLI contract', () => {
       exitCode: 1,
       stdout: '',
       stderr: 'Provider unavailable.\n',
+    });
+  });
+
+  it('writes chunks before completion and avoids printing the answer twice', async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const onText = vi.fn();
+    const pending = runCli(
+      ['ask', 'prompt'],
+      '0.1.0',
+      async (_, options) => {
+        options.onText?.('Hello');
+        await gate;
+        options.onText?.(' world');
+        return { ok: true, text: 'Hello world' };
+      },
+      { onText },
+    );
+
+    expect(onText).toHaveBeenCalledExactlyOnceWith('Hello');
+    finish();
+    expect(await pending).toEqual({ exitCode: 0, stdout: '\n', stderr: '' });
+    expect(onText.mock.calls).toEqual([['Hello'], [' world']]);
+  });
+
+  it('preserves partial output and reports cancellation with exit code 130', async () => {
+    const controller = new AbortController();
+    const onText = vi.fn();
+    const result = await runCli(
+      ['ask', 'prompt'],
+      '0.1.0',
+      async (_, options) => {
+        options.onText?.('Partial');
+        controller.abort();
+        return { ok: false, message: 'Request cancelled.' };
+      },
+      { onText, signal: controller.signal },
+    );
+
+    expect(onText).toHaveBeenCalledExactlyOnceWith('Partial');
+    expect(result).toEqual({
+      exitCode: 130,
+      stdout: '\n',
+      stderr: 'Request cancelled.\n',
+    });
+  });
+
+  it('reports a failure after partial output without adding a second newline', async () => {
+    const onText = vi.fn();
+    const result = await runCli(
+      ['ask', 'prompt'],
+      '0.1.0',
+      async (_, options) => {
+        options.onText?.('Partial\n');
+        return { ok: false, message: 'OpenAI did not complete the response.' };
+      },
+      { onText },
+    );
+    expect(result).toEqual({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'OpenAI did not complete the response.\n',
     });
   });
 });
